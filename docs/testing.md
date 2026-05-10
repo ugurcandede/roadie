@@ -32,7 +32,7 @@ test/setup.sh
 
 # 2. Copy the test config example and edit it to mirror your real projects
 #    (host=localhost, port=2222, identityFile=test/sandbox/keys/id_test).
-cp roadie.config.test.example.json roadie.config.test.json
+cp config.test.example.json config.test.json
 
 # 3. Run the integration tests.
 node --test test/integration.test.js
@@ -41,7 +41,7 @@ node --test test/integration.test.js
 test/teardown.sh
 ```
 
-Each project in `roadie.config.test.json` becomes one test case; `runProject`
+Each project in `config.test.json` becomes one test case; `runProject`
 is called directly and `result.ok === true` is asserted.
 
 ### Sandbox container
@@ -63,12 +63,12 @@ test/sandbox/keys` manually.
 
 | Env var       | Effect                                                      |
 |---------------|-------------------------------------------------------------|
-| `TEST_CONFIG` | Override the test config path (default `roadie.config.test.json`). |
+| `TEST_CONFIG` | Override the test config path (default `config.test.json`). |
 | `SKIP_PROBE`  | Skip the pre-test SSH reachability check (rarely useful).   |
 
 ## Writing your own integration cases
 
-Each top-level `projects[]` entry in `roadie.config.test.json` becomes one
+Each top-level `projects[]` entry in `config.test.json` becomes one
 `node:test` case — its name is `integration: <project name>`. Include
 assertions inside `remote` steps (e.g. `test -f /tmp/payload.txt`) — those
 exit non-zero on failure, which fails the step, which fails the project,

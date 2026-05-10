@@ -21,11 +21,11 @@ from a TUI menu (or non-interactively from another script).
 ## Quick start
 
 ```bash
-# 1. Generate an example config in the current directory.
-node roadie.js --init                              # → roadie.config.example.json
+# 1. Generate a config skeleton in the current directory.
+node roadie.js --init                              # → config.json
 
-# 2. Copy it and edit projects/steps for your apps.
-cp roadie.config.example.json roadie.config.json
+# 2. Edit config.json — fill in projects/steps for your apps.
+#    See config.example.json for a fully populated reference.
 
 # 3. Run the interactive menu (↑↓ to pick, enter to deploy).
 node roadie.js
@@ -48,8 +48,8 @@ node roadie.js --project=<name>      # run a specific project, non-interactive
 node roadie.js --message="..."       # success-only message (overrides project.notify)
 node roadie.js --list                # print every project + its steps
 node roadie.js --validate            # check the config schema (no run); summary on success
-node roadie.js --init                # write roadie.config.example.json
-node roadie.js --config=<path>       # use a non-default config (default: roadie.config.json)
+node roadie.js --init                # write config.json (template)
+node roadie.js --config=<path>       # use a non-default config (default: config.json)
 node roadie.js --help
 ```
 
@@ -98,8 +98,8 @@ roadie/
 ├── LICENSE                              # MIT
 ├── README.md
 ├── roadie.js                            # thin CLI entry — calls lib/cli.run()
-├── roadie.config.example.json           # `--init` writes this
-├── roadie.config.test.example.json      # template for the integration sandbox
+├── config.example.json                  # populated reference (full schema example)
+├── config.test.example.json             # template for the integration sandbox
 ├── docs/
 │   ├── configuration.md
 │   ├── recipes.md

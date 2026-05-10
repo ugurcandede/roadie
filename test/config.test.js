@@ -68,23 +68,25 @@ test('per-OS cwd resolves for current platform', () => {
     const want = process.platform;
     const cwd = { mac: '/m', linux: '/l', win: 'C:\\w' };
     cwd[want === 'darwin' ? 'mac' : want === 'win32' ? 'win' : 'linux'] = '/here';
-    const c = loadConfig(withConfig({
+    const cfg = withConfig({
         projects: [{
             name: 'p', cwd,
             steps: [{ name: 's', type: 'local', run: 'true' }],
         }],
-    }));
-    assert.equal(c.projects[0].cwd, '/here');
+    });
+    const c = loadConfig(cfg);
+    assert.equal(c.projects[0].cwd, path.resolve(path.dirname(cfg), '/here'));
 });
 
 test('per-OS cwd falls back to "default" when current platform is missing', () => {
-    const c = loadConfig(withConfig({
+    const cfg = withConfig({
         projects: [{
             name: 'p', cwd: { default: '/fallback' },
             steps: [{ name: 's', type: 'local', run: 'true' }],
         }],
-    }));
-    assert.equal(c.projects[0].cwd, '/fallback');
+    });
+    const c = loadConfig(cfg);
+    assert.equal(c.projects[0].cwd, path.resolve(path.dirname(cfg), '/fallback'));
 });
 
 // --- load errors -----------------------------------------------------------
