@@ -219,15 +219,26 @@ test('rejects ssh missing host', () => {
     );
 });
 
-test('rejects ssh missing user', () => {
+test('accepts ssh without user (relies on ~/.ssh/config)', () => {
+    const c = loadConfig(withConfig({
+        projects: [{
+            name: 'p', ssh: { host: 'h' },
+            steps: [{ name: 's', type: 'remote', run: 'true' }],
+        }],
+    }));
+    assert.equal(c.projects[0].ssh.host, 'h');
+    assert.equal(c.projects[0].ssh.user, undefined);
+});
+
+test('rejects ssh.user empty string', () => {
     assert.throws(
         () => loadConfig(withConfig({
             projects: [{
-                name: 'p', ssh: { host: 'h' },
+                name: 'p', ssh: { host: 'h', user: '   ' },
                 steps: [{ name: 's', type: 'remote', run: 'true' }],
             }],
         })),
-        /ssh\.user is required/,
+        /ssh\.user must be a non-empty string/,
     );
 });
 
@@ -271,6 +282,94 @@ test('rejects PathLike object that does not cover current platform and has no de
                 steps: [{ name: 's', type: 'local', run: 'true' }],
             }],
         })),
-        /no path defined for this platform/,
+        /no value defined for this platform/,
+    );
+});
+
+// --- per-OS run -----------------------------------------------------------
+
+test('accepts per-OS run for local step', () => {
+    const want = process.platform;
+    const run = { mac: 'echo mac', linux: 'echo linux', win: 'echo win' };
+    run[want === 'darwin' ? 'mac' : want === 'win32' ? 'win' : 'linux'] = 'echo selected';
+    const c = loadConfig(withConfig({
+        projects: [{ name: 'p',
+            steps: [{ name: 's', type: 'local', run }],
+        }],
+    }));
+    assert.equal(c.projects[0].steps[0].run, 'echo selected');
+});
+
+test('accepts per-OS run with only default', () => {
+    const c = loadConfig(withConfig({
+        projects: [{ name: 'p',
+            steps: [{ name: 's', type: 'local', run: { default: 'echo fallback' } }],
+        }],
+    }));
+    assert.equal(c.projects[0].steps[0].run, 'echo fallback');
+});
+
+test('rejects per-OS run with no platform match and no default', () => {
+    const want = process.platform;
+    const run = {};
+    if (want !== 'darwin') run.mac = 'echo m';
+    if (want !== 'linux') run.linux = 'echo l';
+    if (want !== 'win32') run.win = 'echo w';
+    assert.throws(
+        () => loadConfig(withConfig({
+            projects: [{ name: 'p',
+                steps: [{ name: 's', type: 'local', run }],
+            }],
+        })),
+        /no value defined for this platform/,
+    );
+});
+
+test('rejects per-OS run that resolves to empty/whitespace', () => {
+    const want = process.platform;
+    const run = {};
+    run[want === 'darwin' ? 'mac' : want === 'win32' ? 'win' : 'linux'] = '   ';
+    assert.throws(
+        () => loadConfig(withConfig({
+            projects: [{ name: 'p',
+                steps: [{ name: 's', type: 'local', run }],
+            }],
+        })),
+        /"run" is required/,
+    );
+});
+
+// --- confirm step ---------------------------------------------------------
+
+test('accepts confirm step with prompt', () => {
+    const c = loadConfig(withConfig({
+        projects: [{ name: 'p',
+            steps: [{ name: 's', type: 'confirm', prompt: 'press enter' }],
+        }],
+    }));
+    const step = c.projects[0].steps[0];
+    assert.equal(step.type, 'confirm');
+    assert.equal(step.prompt, 'press enter');
+});
+
+test('rejects confirm step without prompt', () => {
+    assert.throws(
+        () => loadConfig(withConfig({
+            projects: [{ name: 'p',
+                steps: [{ name: 's', type: 'confirm' }],
+            }],
+        })),
+        /"prompt" is required/,
+    );
+});
+
+test('rejects confirm step with empty prompt', () => {
+    assert.throws(
+        () => loadConfig(withConfig({
+            projects: [{ name: 'p',
+                steps: [{ name: 's', type: 'confirm', prompt: '   ' }],
+            }],
+        })),
+        /"prompt" is required/,
     );
 });

@@ -41,8 +41,9 @@ with `"cwd": "."` works the same wherever the file lives.
 | `local`    | `run`, optional `cwd` | Shell command on this machine. Inherits env, `FORCE_COLOR=0`.        |
 | `transfer` | `from`, `to`          | `scp -r` — file or directory. `from` resolved against project `cwd`. |
 | `remote`   | `run`, optional `cwd` | `ssh user@host -- <run>`. `cwd` is the **server-side** path.         |
+| `confirm`  | `prompt`              | Prints `prompt`, blocks until the user presses Enter. No shell, cross-platform. Doesn't require `ssh`. |
 
-`transfer` and `remote` require a project-level `ssh` block. `local` does not —
+`transfer` and `remote` require a project-level `ssh` block. `local` and `confirm` do not —
 you can write `scp preprodapi:...` or `rsync ...` as a `local` step and use
 your own `~/.ssh/config` aliases without the `ssh` block at all.
 
@@ -64,6 +65,17 @@ keyed by platform:
 Aliases: `mac` / `macos` / `osx` / `darwin`, `win` / `windows` / `win32`,
 `linux`. `default` (or `*`) is the fallback when no platform key matches.
 A missing platform without a `default` errors out at config-load time.
+
+`local` and `remote` `run` fields accept the same per-OS object form:
+
+```json
+"run": {
+  "win":     "pwsh -Command \"Move-Item *.jar app.jar\"",
+  "default": "mv *.jar app.jar"
+}
+```
+
+Unlike path fields, `run` is **not** `~`-expanded — the shell handles that.
 
 ## SSH block
 
