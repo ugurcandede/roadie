@@ -158,6 +158,55 @@ After a successful run the script prints (skipped on failure):
 
 Useful as a checklist or for paste-into-incident-channel after deploy.
 
+## Recipes
+
+These aren't features — they're patterns you can build out of the existing
+`local` / `transfer` / `remote` step types. Two of the most common:
+
+### Verifying transfers (sha256 round-trip)
+
+`transfer` is a thin wrapper around `scp` and doesn't checksum what it sent.
+For uploads where corruption matters, hash locally before upload and verify
+on the remote side using the standard `sha256sum -c`:
+
+```json
+{
+  "name": "verified-deploy",
+  "ssh": { "host": "...", "user": "..." },
+  "steps": [
+    { "name": "Build + sha",      "type": "local",    "run": "tar czf dist.tgz dist/ && sha256sum dist.tgz > dist.tgz.sha256" },
+    { "name": "Upload artifact",  "type": "transfer", "from": "dist.tgz",        "to": "/tmp/dist.tgz" },
+    { "name": "Upload checksum",  "type": "transfer", "from": "dist.tgz.sha256", "to": "/tmp/dist.tgz.sha256" },
+    { "name": "Verify on remote", "type": "remote",   "run": "cd /tmp && sha256sum -c dist.tgz.sha256" },
+    { "name": "Activate",         "type": "remote",   "run": "sudo systemctl restart my-app" }
+  ]
+}
+```
+
+`sha256sum -c` exits non-zero on mismatch, so the step fails and the deploy
+aborts **before** the "Activate" step ever runs. Same pattern works with
+`shasum -a 256`, `openssl dgst -sha256`, or `gpg --verify` for signatures.
+
+### Build manifest in the deploy notice
+
+To leave an audit trail of which artifacts were shipped, capture hashes in
+the build step and surface them in the success output:
+
+```json
+{
+  "name": "Build", "type": "local",
+  "run": "npm run build && sha256sum dist/* | tee build-manifest.txt"
+}
+```
+
+The manifest is streamed inline in the indented step output **and** saved
+next to your artifacts. Reference its location from the project's `notify`
+field if you want the post-deploy checklist to point at it:
+
+```json
+"notify": "Build manifest: ./build-manifest.txt  ·  Smoke: https://test.internal/health"
+```
+
 ## Tests
 
 Three layers, all on the built-in `node:test` runner — no framework dep.
