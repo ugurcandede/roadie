@@ -1,0 +1,66 @@
+{
+  "projects": [
+    {
+      "name": "frontend-test",
+      "cwd": {
+        "mac":   "~/work/my-frontend",
+        "linux": "/home/deploy/my-frontend",
+        "win":   "C:\\dev\\my-frontend"
+      },
+      "notify": "Smoke check: https://test.internal/health  ·  Did the CDN cache get purged?",
+      "ssh": {
+        "host": "test.internal",
+        "user": "deploy",
+        "port": 22,
+        "identityFile": {
+          "mac":     "~/.ssh/id_ed25519",
+          "linux":   "~/.ssh/id_ed25519",
+          "win":     "C:\\Users\\me\\.ssh\\id_ed25519",
+          "default": "~/.ssh/id_ed25519"
+        }
+      },
+      "steps": [
+        { "name": "Install deps",     "type": "local",    "run": "npm ci" },
+        { "name": "Build",            "type": "local",    "run": "npm run build" },
+        { "name": "Clean remote dir", "type": "remote",   "run": "rm -rf /var/www/app/*" },
+        { "name": "Upload dist",      "type": "transfer", "from": "dist/.",        "to": "/var/www/app/" },
+        { "name": "Reload nginx",     "type": "remote",   "run": "sudo systemctl reload nginx" }
+      ]
+    },
+
+    {
+      "name": "backend-spring",
+      "cwd": "~/work/my-spring-app",
+      "ssh": {
+        "host": "test.internal",
+        "user": "deploy"
+      },
+      "steps": [
+        { "name": "Maven package",  "type": "local",    "run": "mvn -B -DskipTests package" },
+        { "name": "Stop service",   "type": "remote",   "run": "sudo systemctl stop my-app" },
+        { "name": "Upload jar",     "type": "transfer", "from": "target/my-app.jar", "to": "/opt/my-app/my-app.jar" },
+        { "name": "Start service",  "type": "remote",   "run": "sudo systemctl start my-app" },
+        { "name": "Wait for ready", "type": "remote",   "run": "for i in $(seq 1 30); do curl -fsS localhost:8080/health && exit 0; sleep 1; done; exit 1" }
+      ]
+    },
+
+    {
+      "name": "local-only-task",
+      "cwd": ".",
+      "steps": [
+        { "name": "Lint",  "type": "local", "run": "npm run lint" },
+        { "name": "Tests", "type": "local", "run": "npm test" }
+      ]
+    },
+
+    {
+      "name": "raw-scp-no-ssh-block",
+      "cwd": ".",
+      "steps": [
+        { "name": "Tar build",  "type": "local", "run": "tar czf dist.tgz dist/" },
+        { "name": "Upload",     "type": "local", "run": "scp dist.tgz preprodapi:/tmp/" },
+        { "name": "Restart",    "type": "local", "run": "ssh preprodapi 'sudo systemctl restart my-app'" }
+      ]
+    }
+  ]
+}

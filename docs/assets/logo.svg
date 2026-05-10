@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="roadie">
+  <rect width="120" height="120" rx="28" fill="#1E293B"/>
+
+  <!-- local box (top) with single port slot -->
+  <rect x="45" y="16" width="30" height="26" rx="2" fill="#ffffff"/>
+  <rect x="55" y="35" width="10" height="2" rx="0.8" fill="#1E293B"/>
+
+  <!-- 3 patch cables going down, symmetric S-curves; middle is a direct run -->
+  <path d="M54 42 C 54 61, 41 61, 41 80" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M60 42 L 60 80"               stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M66 42 C 66 61, 79 61, 79 80" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 3 server units side-by-side, each with status LED near the top -->
+  <rect x="34" y="80" width="15" height="25" rx="3" fill="#ffffff"/>
+  <circle cx="41" cy="86" r="2.2" fill="#A3E635"/>
+
+  <rect x="53" y="80" width="15" height="25" rx="3" fill="#ffffff"/>
+  <circle cx="60" cy="86" r="2.2" fill="#A3E635"/>
+
+  <rect x="72" y="80" width="15" height="25" rx="3" fill="#ffffff"/>
+  <circle cx="79" cy="86" r="2.2" fill="#A3E635"/>
+</svg>
