@@ -63,193 +63,33 @@ Exit codes:
 
 The first failing step stops the run.
 
-## Configuration
-
-A config is one JSON file with a `projects` array. Each project has a `name`,
-optional `cwd`, optional `ssh`, optional `notify`, and a `steps` list:
+## At a glance — minimal config
 
 ```json
 {
   "projects": [
     {
-      "name": "frontend-test",
-      "cwd": "~/work/my-frontend",
-      "notify": "Smoke test: https://test.internal/health",
-      "ssh": {
-        "host": "test.internal",
-        "user": "deploy",
-        "port": 22,
-        "identityFile": "~/.ssh/id_ed25519"
-      },
+      "name": "my-app",
+      "ssh": { "host": "test.internal", "user": "deploy" },
       "steps": [
-        {
-          "name": "Install",
-          "type": "local",
-          "run": "npm ci"
-        },
-        {
-          "name": "Build",
-          "type": "local",
-          "run": "npm run build"
-        },
-        {
-          "name": "Clean remote",
-          "type": "remote",
-          "run": "rm -rf /var/www/app/*"
-        },
-        {
-          "name": "Upload dist",
-          "type": "transfer",
-          "from": "dist/.",
-          "to": "/var/www/app/"
-        },
-        {
-          "name": "Reload nginx",
-          "type": "remote",
-          "run": "sudo systemctl reload nginx"
-        }
+        { "name": "Build",  "type": "local",    "run": "npm run build" },
+        { "name": "Upload", "type": "transfer", "from": "dist/.", "to": "/var/www/app/" },
+        { "name": "Reload", "type": "remote",   "run": "sudo systemctl reload nginx" }
       ]
     }
   ]
 }
 ```
 
-`cwd` is resolved relative to the config file's directory, so configs stay
-portable across machines.
+Three step types: `local` (shell command here), `transfer` (`scp -r`),
+`remote` (shell command on the SSH target). Full schema, per-OS paths,
+notify-on-success, and the validation rules are documented separately.
 
-### Step types
+## Documentation
 
-| Type       | Fields                | Notes                                                                |
-|------------|-----------------------|----------------------------------------------------------------------|
-| `local`    | `run`, optional `cwd` | Shell command on this machine. Inherits env, `FORCE_COLOR=0`.        |
-| `transfer` | `from`, `to`          | `scp -r` — file or directory. `from` resolved against project `cwd`. |
-| `remote`   | `run`, optional `cwd` | `ssh user@host -- <run>`. `cwd` is the **server-side** path.         |
-
-`transfer` and `remote` require a project-level `ssh` block. `local` does not —
-you can write `scp preprodapi:...` or `rsync ...` as a `local` step and use
-your own `~/.ssh/config` aliases without the `ssh` block at all.
-
-### Per-OS paths
-
-`project.cwd`, `step.cwd` (for `local`), `step.from` (for `transfer`), and
-`ssh.identityFile` accept either a string (same on every OS) or an object
-keyed by platform:
-
-```json
-"cwd": {
-"mac": "~/work/my-app",
-"linux": "/home/deploy/my-app",
-"win":     "C:\\dev\\my-app",
-"default": "~/my-app"
-}
-```
-
-Aliases: `mac` / `macos` / `osx` / `darwin`, `win` / `windows` / `win32`,
-`linux`. `default` (or `*`) is the fallback when no platform key matches.
-A missing platform without a `default` errors out at config-load time.
-
-### Notify on success
-
-After a successful run the script prints (skipped on failure):
-
-1. The optional `notify` string (or `--message="..."` if given — flag wins).
-2. An auto-generated recap of every `transfer` and `remote` step that ran,
-   including the actual command, prefixed with the SSH target.
-
-Useful as a checklist or for paste-into-incident-channel after deploy.
-
-## Recipes
-
-These aren't features — they're patterns you can build out of the existing
-`local` / `transfer` / `remote` step types. Two of the most common:
-
-### Verifying transfers (sha256 round-trip)
-
-`transfer` is a thin wrapper around `scp` and doesn't checksum what it sent.
-For uploads where corruption matters, hash locally before upload and verify
-on the remote side using the standard `sha256sum -c`:
-
-```json
-{
-  "name": "verified-deploy",
-  "ssh": { "host": "...", "user": "..." },
-  "steps": [
-    { "name": "Build + sha",      "type": "local",    "run": "tar czf dist.tgz dist/ && sha256sum dist.tgz > dist.tgz.sha256" },
-    { "name": "Upload artifact",  "type": "transfer", "from": "dist.tgz",        "to": "/tmp/dist.tgz" },
-    { "name": "Upload checksum",  "type": "transfer", "from": "dist.tgz.sha256", "to": "/tmp/dist.tgz.sha256" },
-    { "name": "Verify on remote", "type": "remote",   "run": "cd /tmp && sha256sum -c dist.tgz.sha256" },
-    { "name": "Activate",         "type": "remote",   "run": "sudo systemctl restart my-app" }
-  ]
-}
-```
-
-`sha256sum -c` exits non-zero on mismatch, so the step fails and the deploy
-aborts **before** the "Activate" step ever runs. Same pattern works with
-`shasum -a 256`, `openssl dgst -sha256`, or `gpg --verify` for signatures.
-
-### Build manifest in the deploy notice
-
-To leave an audit trail of which artifacts were shipped, capture hashes in
-the build step and surface them in the success output:
-
-```json
-{
-  "name": "Build", "type": "local",
-  "run": "npm run build && sha256sum dist/* | tee build-manifest.txt"
-}
-```
-
-The manifest is streamed inline in the indented step output **and** saved
-next to your artifacts. Reference its location from the project's `notify`
-field if you want the post-deploy checklist to point at it:
-
-```json
-"notify": "Build manifest: ./build-manifest.txt  ·  Smoke: https://test.internal/health"
-```
-
-## Tests
-
-Three layers, all on the built-in `node:test` runner — no framework dep.
-
-| Layer       | File                       | What it covers                                       | Needs Docker |
-|-------------|----------------------------|------------------------------------------------------|:------------:|
-| Unit        | `test/config.test.js`      | Every `loadConfig` validation rule (happy + error)   |      no      |
-| CLI smoke   | `test/cli.test.js`         | `--validate`, `--help`, `--list`, unknown-arg wiring |      no      |
-| Integration | `test/integration.test.js` | Each project runs end-to-end against a local sshd    |   **yes**    |
-
-### Run unit + CLI tests
-
-Fast, no setup. Good as a pre-commit check.
-
-```bash
-node --test test/config.test.js test/cli.test.js
-```
-
-### Run integration tests
-
-Validates that a real project's steps actually work end-to-end before pointing
-them at the real server. Spins up a local Docker sshd container.
-
-```bash
-# 1. One-time: generate a throwaway keypair and start the sandbox container.
-test/setup.sh
-
-# 2. Copy the test config example and edit it to mirror your real projects
-#    (host=localhost, port=2222, identityFile=test/sandbox/keys/id_test).
-cp roadie.config.test.example.json roadie.config.test.json
-
-# 3. Run the integration tests.
-node --test test/integration.test.js
-
-# 4. When you're done.
-test/teardown.sh
-```
-
-Each project in `roadie.config.test.json` becomes one test case; `runProject`
-is called directly and `result.ok === true` is asserted.
-
-Knobs: `TEST_CONFIG=<path>` to point at a different config file,
-`SKIP_PROBE=1` to skip the pre-test SSH reachability check.
+- [**Configuration**](docs/configuration.md) — full schema, step types, per-OS paths, ssh block, notify, `--validate`
+- [**Recipes**](docs/recipes.md) — sha256 round-trip verify, build manifests, atomic swap, health-check polling
+- [**Testing**](docs/testing.md) — three-layer test strategy + Docker sshd sandbox setup
 
 ## Layout
 
@@ -260,7 +100,11 @@ roadie/
 ├── roadie.js                            # thin CLI entry — calls lib/cli.run()
 ├── roadie.config.example.json           # `--init` writes this
 ├── roadie.config.test.example.json      # template for the integration sandbox
-├── docs/assets/logo.svg
+├── docs/
+│   ├── configuration.md
+│   ├── recipes.md
+│   ├── testing.md
+│   └── assets/logo.svg
 ├── lib/
 │   ├── cli.js                           # arg parsing + --help/--init/--list/--validate + main flow
 │   ├── colors.js                        # ANSI palette + bell
@@ -293,5 +137,4 @@ roadie/
 - **`FORCE_COLOR=0`** is set for local steps so build tools don't smear ANSI
   codes through the indented output.
 - **No remote artifact verification** beyond what your own `remote` steps
-  check. If you want post-deploy validation, add a `curl localhost/health`
-  remote step at the end.
+  check. If you want post-deploy validation, see the [verify recipe](docs/recipes.md#verifying-transfers-sha256-round-trip).
