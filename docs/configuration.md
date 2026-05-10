@@ -97,7 +97,7 @@ runs (e.g., when wiring roadie into an ad-hoc script).
 work. Useful as a pre-commit hook or before sharing a config:
 
 ```bash
-node roadie.js --validate --config=roadie.config.json
+node roadie.js --validate --config=config.json
 ```
 
 Exit `0` with a green `Config OK` summary on success; exit `1` with a

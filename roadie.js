@@ -8,11 +8,10 @@
  * Thin entry. All flow lives in lib/cli.js.
  */
 
-const path = require('path');
-const { run, EXAMPLE_FILE } = require('./lib/cli');
+const { run } = require('./lib/cli');
 const { C } = require('./lib/colors');
 
-run({ exampleSrc: path.join(__dirname, EXAMPLE_FILE) }).catch((e) => {
+run().catch((e) => {
     process.stderr.write(`${C.red}Unexpected error:${C.reset} ${e.stack || e.message}\n`);
     process.exit(1);
 });

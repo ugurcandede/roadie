@@ -1,11 +1,11 @@
 /**
  * test/integration.test.js
  *
- * Runs every project in roadie.config.test.json against the local Docker
+ * Runs every project in config.test.json against the local Docker
  * sshd sandbox (started by test/setup.sh). Asserts result.ok === true.
  *
  *   1) test/setup.sh                          # one-time: keypair + container
- *   2) cp roadie.config.test.example.json roadie.config.test.json
+ *   2) cp config.test.example.json config.test.json
  *   3) (edit projects to point to localhost:2222 with the test key)
  *   4) node --test test/integration.test.js
  *
@@ -23,7 +23,7 @@ const { loadConfig } = require('../lib/config');
 const { runProject } = require('../lib/runner');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const CONFIG_PATH = process.env.TEST_CONFIG || path.join(PROJECT_ROOT, 'roadie.config.test.json');
+const CONFIG_PATH = process.env.TEST_CONFIG || path.join(PROJECT_ROOT, 'config.test.json');
 const SANDBOX_KEY = path.join(PROJECT_ROOT, 'test', 'sandbox', 'keys', 'id_test');
 
 function fail(msg) {
@@ -34,7 +34,7 @@ function fail(msg) {
 if (!fs.existsSync(CONFIG_PATH)) {
     fail(
         `Test config not found: ${CONFIG_PATH}\n` +
-        `First: cp roadie.config.test.example.json roadie.config.test.json\n` +
+        `First: cp config.test.example.json config.test.json\n` +
         `(Or set TEST_CONFIG=<path> to point at a different file.)`,
     );
 }
