@@ -45,7 +45,25 @@ test('--validate exits 0 and prints summary for a valid config', () => {
     assert.equal(r.status, 0, `stderr: ${r.stderr}`);
     assert.match(r.stdout, /Config OK/);
     assert.match(r.stdout, /2 projects, 2 steps total/);
-    assert.match(r.stdout, /1 local, 0 transfer, 1 remote/);
+    assert.match(r.stdout, /1 local, 0 transfer, 1 remote, 0 confirm/);
+});
+
+test('--validate summary counts confirm steps', () => {
+    const cfg = withConfig({
+        projects: [{
+            name: 'p',
+            ssh: { host: 'h' },
+            steps: [
+                { name: 'b', type: 'local',    run: 'true' },
+                { name: 'g', type: 'confirm',  prompt: 'go?' },
+                { name: 'u', type: 'transfer', from: 'a', to: '/b' },
+                { name: 'r', type: 'remote',   run: 'true' },
+            ],
+        }],
+    });
+    const r = spawnRoadie(['--validate', `--config=${cfg}`]);
+    assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+    assert.match(r.stdout, /1 local, 1 transfer, 1 remote, 1 confirm/);
 });
 
 test('--validate exits 1 with "Config error" for invalid config', () => {
@@ -96,4 +114,35 @@ test('unknown argument exits 2 with help and "Unknown argument"', () => {
     const r = spawnRoadie(['--frobnicate']);
     assert.equal(r.status, 2);
     assert.match(r.stderr, /Unknown argument: --frobnicate/);
+});
+
+// --- --init ----------------------------------------------------------------
+
+test('--init writes config.json with parseable JSON when not existing', () => {
+    const subdir = fs.mkdtempSync(path.join(TMP_DIR, 'init-'));
+    const r = spawnSync('node', [ENTRY, '--init'], { cwd: subdir, encoding: 'utf8' });
+    assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+    const target = path.join(subdir, 'config.json');
+    assert.ok(fs.existsSync(target), 'config.json not written');
+    const content = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.ok(Array.isArray(content.projects) && content.projects.length > 0);
+});
+
+test('--init template includes all four step types', () => {
+    const subdir = fs.mkdtempSync(path.join(TMP_DIR, 'init-'));
+    const r = spawnSync('node', [ENTRY, '--init'], { cwd: subdir, encoding: 'utf8' });
+    assert.equal(r.status, 0);
+    const content = JSON.parse(fs.readFileSync(path.join(subdir, 'config.json'), 'utf8'));
+    const types = new Set(content.projects[0].steps.map((s) => s.type));
+    for (const t of ['local', 'confirm', 'transfer', 'remote']) {
+        assert.ok(types.has(t), `template missing step type: ${t}`);
+    }
+});
+
+test('--init exits 1 when config.json already exists', () => {
+    const subdir = fs.mkdtempSync(path.join(TMP_DIR, 'init-'));
+    fs.writeFileSync(path.join(subdir, 'config.json'), '{}');
+    const r = spawnSync('node', [ENTRY, '--init'], { cwd: subdir, encoding: 'utf8' });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /already exists/);
 });

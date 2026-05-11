@@ -1,65 +1,190 @@
 {
   "projects": [
     {
-      "name": "frontend-test",
+      "name": "backend-api",
       "cwd": {
-        "mac":   "~/work/my-frontend",
-        "linux": "/home/deploy/my-frontend",
-        "win":   "C:\\dev\\my-frontend"
+        "win": "C:\\projects\\backend-api",
+        "default": "~/projects/backend-api"
       },
-      "notify": "Smoke check: https://test.internal/health  ·  Did the CDN cache get purged?",
       "ssh": {
-        "host": "test.internal",
+        "host": "api.testenv.internal",
         "user": "deploy",
         "port": 22,
         "identityFile": {
-          "mac":     "~/.ssh/id_ed25519",
-          "linux":   "~/.ssh/id_ed25519",
-          "win":     "C:\\Users\\me\\.ssh\\id_ed25519",
+          "win": "C:\\Users\\me\\.ssh\\id_ed25519",
           "default": "~/.ssh/id_ed25519"
         }
       },
       "steps": [
-        { "name": "Install deps",     "type": "local",    "run": "npm ci" },
-        { "name": "Build",            "type": "local",    "run": "npm run build" },
-        { "name": "Clean remote dir", "type": "remote",   "run": "rm -rf /var/www/app/*" },
-        { "name": "Upload dist",      "type": "transfer", "from": "dist/.",        "to": "/var/www/app/" },
-        { "name": "Reload nginx",     "type": "remote",   "run": "sudo systemctl reload nginx" }
-      ]
+        {
+          "name": "Gradle clean & assemble",
+          "type": "local",
+          "run": {
+            "win": ".\\gradlew clean assemble",
+            "default": "./gradlew clean assemble"
+          }
+        },
+        {
+          "name": "Rename jar",
+          "type": "local",
+          "cwd": "build/libs",
+          "run": {
+            "win": "pwsh -Command \"Move-Item app-*-all.jar app-latest.jar\"",
+            "default": "mv app-*-all.jar app-latest.jar"
+          }
+        },
+        {
+          "name": "Generate sha256",
+          "type": "local",
+          "cwd": "build/libs",
+          "run": {
+            "win": "pwsh -Command \"$h = (Get-FileHash -Algorithm SHA256 app-latest.jar).Hash.ToLower(); Set-Content -Path app-latest.jar.sha256 -Encoding ascii -NoNewline -Value ($h + '  app-latest.jar' + [char]10)\"",
+            "default": "shasum -a 256 app-latest.jar > app-latest.jar.sha256"
+          }
+        },
+        {
+          "name": "Wait for old process to stop",
+          "type": "confirm",
+          "prompt": "Old jar stopped (pkill -f app-latest.jar)? Enter to continue."
+        },
+        {
+          "name": "Upload jar",
+          "type": "transfer",
+          "from": "build/libs/app-latest.jar",
+          "to": "/srv/app/app-latest.jar"
+        },
+        {
+          "name": "Upload checksum",
+          "type": "transfer",
+          "from": "build/libs/app-latest.jar.sha256",
+          "to": "/srv/app/app-latest.jar.sha256"
+        },
+        {
+          "name": "Verify sha256 on remote",
+          "type": "remote",
+          "cwd": "/srv/app",
+          "run": "sha256sum -c app-latest.jar.sha256"
+        }
+      ],
+      "notify": "Start on remote:\n  java -jar /srv/app/app-latest.jar &\n\nChecksum: /srv/app/app-latest.jar.sha256"
     },
 
     {
-      "name": "backend-spring",
-      "cwd": "~/work/my-spring-app",
+      "name": "frontend-app",
+      "cwd": {
+        "win": "C:\\projects\\frontend-app",
+        "default": "~/projects/frontend-app"
+      },
       "ssh": {
-        "host": "test.internal",
-        "user": "deploy"
+        "host": "ui.testenv.internal"
       },
       "steps": [
-        { "name": "Maven package",  "type": "local",    "run": "mvn -B -DskipTests package" },
-        { "name": "Stop service",   "type": "remote",   "run": "sudo systemctl stop my-app" },
-        { "name": "Upload jar",     "type": "transfer", "from": "target/my-app.jar", "to": "/opt/my-app/my-app.jar" },
-        { "name": "Start service",  "type": "remote",   "run": "sudo systemctl start my-app" },
-        { "name": "Wait for ready", "type": "remote",   "run": "for i in $(seq 1 30); do curl -fsS localhost:8080/health && exit 0; sleep 1; done; exit 1" }
-      ]
+        {
+          "name": "Build",
+          "type": "local",
+          "run": {
+            "win": "pwsh -Command \"Copy-Item .env.production.example .env.production.local && yarn next build\"",
+            "default": "cp .env.production.example .env.production.local && yarn next build"
+          }
+        },
+        {
+          "name": "Remove .next/cache",
+          "type": "local",
+          "run": {
+            "win": "if exist .next\\cache rd /s /q .next\\cache",
+            "default": "rm -rf .next/cache"
+          }
+        },
+        {
+          "name": "Ensure staging dir",
+          "type": "local",
+          "cwd": "..",
+          "run": {
+            "win": "if not exist staging mkdir staging",
+            "default": "mkdir -p staging"
+          }
+        },
+        {
+          "name": "Remove old tarball",
+          "type": "local",
+          "cwd": "..",
+          "run": {
+            "win": "if exist staging\\frontend-app.tar.xz del staging\\frontend-app.tar.xz",
+            "default": "rm -f staging/frontend-app.tar.xz"
+          }
+        },
+        {
+          "name": "Create tar archive",
+          "type": "local",
+          "cwd": "..",
+          "run": {
+            "win": "tar --xz --options=\"xz:compression-level=2,threads=0\" -cf staging/frontend-app.tar.xz frontend-app",
+            "default": "tar -cf - frontend-app | xz -T0 -2 -c > staging/frontend-app.tar.xz"
+          }
+        },
+        {
+          "name": "Generate sha256",
+          "type": "local",
+          "cwd": "..",
+          "run": {
+            "win": "pwsh -Command \"$h = (Get-FileHash -Algorithm SHA256 staging/frontend-app.tar.xz).Hash.ToLower(); Set-Content -Path staging/frontend-app.tar.xz.sha256 -Encoding ascii -NoNewline -Value ($h + '  frontend-app.tar.xz' + [char]10)\"",
+            "default": "cd staging && shasum -a 256 frontend-app.tar.xz > frontend-app.tar.xz.sha256"
+          }
+        },
+        {
+          "name": "Wait for old process to stop",
+          "type": "confirm",
+          "prompt": "Old yarn start stopped? Enter to continue."
+        },
+        {
+          "name": "Upload tar",
+          "type": "transfer",
+          "from": "../staging/frontend-app.tar.xz",
+          "to": "/srv/app/frontend-app.tar.xz"
+        },
+        {
+          "name": "Upload checksum",
+          "type": "transfer",
+          "from": "../staging/frontend-app.tar.xz.sha256",
+          "to": "/srv/app/frontend-app.tar.xz.sha256"
+        },
+        {
+          "name": "Verify sha256 on remote",
+          "type": "remote",
+          "cwd": "/srv/app",
+          "run": "sha256sum -c frontend-app.tar.xz.sha256"
+        },
+        {
+          "name": "Clean stale build on remote",
+          "type": "remote",
+          "cwd": "/srv/app",
+          "run": "rm -rf frontend-app/.next"
+        },
+        {
+          "name": "Extract on remote",
+          "type": "remote",
+          "cwd": "/srv/app",
+          "run": "tar -xJf frontend-app.tar.xz"
+        },
+        {
+          "name": "Cleanup local staging",
+          "type": "local",
+          "cwd": "..",
+          "run": {
+            "win": "if exist staging rd /s /q staging",
+            "default": "rm -rf staging"
+          }
+        }
+      ],
+      "notify": "Start on remote:\n  cd /srv/app/frontend-app && yarn start\n\nChecksum: /srv/app/frontend-app.tar.xz.sha256"
     },
 
     {
-      "name": "local-only-task",
+      "name": "lint-and-test",
       "cwd": ".",
       "steps": [
         { "name": "Lint",  "type": "local", "run": "npm run lint" },
         { "name": "Tests", "type": "local", "run": "npm test" }
-      ]
-    },
-
-    {
-      "name": "raw-scp-no-ssh-block",
-      "cwd": ".",
-      "steps": [
-        { "name": "Tar build",  "type": "local", "run": "tar czf dist.tgz dist/" },
-        { "name": "Upload",     "type": "local", "run": "scp dist.tgz preprodapi:/tmp/" },
-        { "name": "Restart",    "type": "local", "run": "ssh preprodapi 'sudo systemctl restart my-app'" }
       ]
     }
   ]

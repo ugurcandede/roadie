@@ -1,16 +1,17 @@
 /**
  * test/integration.test.js
  *
- * Runs every project in config.test.json against the local Docker
- * sshd sandbox (started by test/setup.sh). Asserts result.ok === true.
+ * Runs every project in the sandbox config against the local Docker sshd
+ * sandbox. Asserts result.ok === true. Projects containing a `confirm` step
+ * are SKIPPED (they would hang waiting for stdin in a test runner).
  *
- *   1) test/setup.sh                          # one-time: keypair + container
- *   2) cp config.test.example.json config.test.json
- *   3) (edit projects to point to localhost:2222 with the test key)
- *   4) node --test test/integration.test.js
+ *   1) node roadie.js --sandbox-up               # one-time: keypair + container
+ *   2) node --test test/integration.test.js
  *
- * Override the test config path with TEST_CONFIG=<path>.
- * Skip the sandbox precheck with SKIP_PROBE=1 (use only if you know what you're doing).
+ * By default uses `config.sandbox.json` if it exists (your customized copy),
+ * otherwise falls back to `config.sandbox.example.json` (the tracked example).
+ * Override the path with TEST_CONFIG=<path>.
+ * Skip the sandbox precheck with SKIP_PROBE=1.
  */
 
 const test = require('node:test');
@@ -23,7 +24,10 @@ const { loadConfig } = require('../lib/config');
 const { runProject } = require('../lib/runner');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const CONFIG_PATH = process.env.TEST_CONFIG || path.join(PROJECT_ROOT, 'config.test.json');
+const SANDBOX_CONFIG = path.join(PROJECT_ROOT, 'config.sandbox.json');
+const SANDBOX_EXAMPLE = path.join(PROJECT_ROOT, 'config.sandbox.example.json');
+const CONFIG_PATH = process.env.TEST_CONFIG
+    || (fs.existsSync(SANDBOX_CONFIG) ? SANDBOX_CONFIG : SANDBOX_EXAMPLE);
 const SANDBOX_KEY = path.join(PROJECT_ROOT, 'test', 'sandbox', 'keys', 'id_test');
 
 function fail(msg) {
@@ -33,9 +37,8 @@ function fail(msg) {
 
 if (!fs.existsSync(CONFIG_PATH)) {
     fail(
-        `Test config not found: ${CONFIG_PATH}\n` +
-        `First: cp config.test.example.json config.test.json\n` +
-        `(Or set TEST_CONFIG=<path> to point at a different file.)`,
+        `Sandbox config not found: ${CONFIG_PATH}\n` +
+        `Expected ${SANDBOX_EXAMPLE} (tracked) or ${SANDBOX_CONFIG} (your copy).`,
     );
 }
 
@@ -43,24 +46,28 @@ if (!process.env.SKIP_PROBE) {
     if (!fs.existsSync(SANDBOX_KEY)) {
         fail(
             `Sandbox key missing: ${SANDBOX_KEY}\n` +
-            `Run test/setup.sh first.`,
+            `Run: node roadie.js --sandbox-up`,
         );
     }
-    const probe = spawnSync('ssh', [
-        '-i', SANDBOX_KEY,
-        '-o', 'BatchMode=yes',
-        '-o', 'ConnectTimeout=3',
-        '-o', 'StrictHostKeyChecking=accept-new',
-        '-p', '2222',
-        'deploy@localhost',
-        'true',
-    ], { stdio: 'pipe' });
-    if (probe.status !== 0) {
-        const err = probe.stderr ? probe.stderr.toString().trim() : `exit ${probe.status}`;
+    // Raw TCP banner probe via a child node process — sshd's "SSH-2.0-..."
+    // identification line. Avoids invoking the system ssh client (Windows
+    // OpenSSH has a quoting quirk surfacing as "Connection to UNKNOWN port -1").
+    const bannerScript = `
+        const net = require('net');
+        const s = net.createConnection({ host: '127.0.0.1', port: 2222 });
+        let buf = '';
+        s.on('data', (d) => {
+            buf += d.toString();
+            if (buf.includes('\\n')) { s.destroy(); process.stdout.write(buf.split('\\n')[0]); process.exit(0); }
+        });
+        s.on('error', () => process.exit(2));
+        setTimeout(() => process.exit(3), 3000);
+    `;
+    const probe = spawnSync(process.execPath, ['-e', bannerScript], { encoding: 'utf8' });
+    if (probe.status !== 0 || !probe.stdout || !probe.stdout.startsWith('SSH-')) {
         fail(
-            `Sandbox connection probe failed (deploy@localhost:2222)\n` +
-            `Error: ${err}\n` +
-            `Fix: run test/setup.sh`,
+            `Sandbox not reachable at 127.0.0.1:2222 (no SSH banner).\n` +
+            `Fix: node roadie.js --sandbox-up`,
         );
     }
 }
@@ -77,6 +84,10 @@ if (config.projects.length === 0) {
 }
 
 for (const project of config.projects) {
+    if (project.steps.some((s) => s.type === 'confirm')) {
+        test(`integration: ${project.name}`, { skip: 'has confirm step (run manually)' }, () => {});
+        continue;
+    }
     test(`integration: ${project.name}`, async () => {
         const result = await runProject(project, {});
         assert.equal(
