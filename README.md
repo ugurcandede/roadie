@@ -50,6 +50,8 @@ node roadie.js --list                # print every project + its steps
 node roadie.js --validate            # check the config schema (no run); summary on success
 node roadie.js --init                # write config.json (template)
 node roadie.js --config=<path>       # use a non-default config (default: config.json)
+node roadie.js --sandbox-up          # build + start Docker sshd sandbox (idempotent)
+node roadie.js --sandbox-down        # stop the sandbox container
 node roadie.js --help
 ```
 
@@ -81,14 +83,16 @@ The first failing step stops the run.
 }
 ```
 
-Three step types: `local` (shell command here), `transfer` (`scp -r`),
-`remote` (shell command on the SSH target). Full schema, per-OS paths,
-notify-on-success, and the validation rules are documented separately.
+Four step types: `local` (shell command here), `transfer` (`scp -r`),
+`remote` (shell command on the SSH target), `confirm` (pause for user
+Enter — manual gate before destructive ops). `cwd` and `run` accept per-OS
+objects (`{ win, mac, linux, default }`) for cross-platform configs. Full
+schema, validation rules, and a real-world example are documented separately.
 
 ## Documentation
 
-- [**Configuration**](docs/configuration.md) — full schema, step types, per-OS paths, ssh block, notify, `--validate`
-- [**Recipes**](docs/recipes.md) — sha256 round-trip verify, build manifests, atomic swap, health-check polling
+- [**Configuration**](docs/configuration.md) — full schema, step types, per-OS values, ssh block, notify, `--validate`
+- [**Recipes**](docs/recipes.md) — full real-world example + smaller patterns (health check, atomic swap)
 - [**Testing**](docs/testing.md) — three-layer test strategy + Docker sshd sandbox setup
 
 ## Layout
@@ -99,30 +103,32 @@ roadie/
 ├── README.md
 ├── roadie.js                            # thin CLI entry — calls lib/cli.run()
 ├── config.example.json                  # populated reference (full schema example)
-├── config.test.example.json             # template for the integration sandbox
+├── config.sandbox.example.json          # sandbox config — used by --sandbox-up + integration tests
 ├── docs/
 │   ├── configuration.md
 │   ├── recipes.md
 │   ├── testing.md
 │   └── assets/logo.svg
 ├── lib/
-│   ├── cli.js                           # arg parsing + --help/--init/--list/--validate + main flow
+│   ├── cli.js                           # arg parsing + --help/--init/--list/--validate + sandbox flags + main flow
 │   ├── colors.js                        # ANSI palette + bell
 │   ├── config.js                        # JSON load + schema validation
 │   ├── display.js                       # progress UI: header, per-step status, banner, notice
 │   ├── menu.js                          # raw-TTY single-select project picker
 │   ├── paths.js                         # ~ expansion + per-OS PathLike resolution
-│   ├── runner.js                        # sequential step executor (local/transfer/remote)
+│   ├── runner.js                        # sequential step executor (local/transfer/remote/confirm)
 │   └── ssh.js                           # spawn wrappers around system ssh / scp
 └── test/
     ├── cli.test.js                      # spawn-based CLI smoke tests
     ├── config.test.js                   # unit tests for loadConfig + every validation rule
     ├── integration.test.js              # end-to-end against the Docker sandbox
-    ├── setup.sh                         # build + start the sandbox
-    ├── teardown.sh                      # stop sandbox + clean known_hosts
+    ├── setup.sh                         # bash shim → test/sandbox/setup.js
+    ├── teardown.sh                      # bash shim → test/sandbox/teardown.js
     └── sandbox/
         ├── Dockerfile                   # alpine + openssh + sudo, key-only deploy user
-        └── docker-compose.yml           # 127.0.0.1:2222 → 22
+        ├── docker-compose.yml           # 127.0.0.1:2222 → 22
+        ├── setup.js                     # cross-platform bootstrap (Docker + keys + probe)
+        └── teardown.js                  # docker compose down + known_hosts cleanup
 ```
 
 ## Notes and limitations
@@ -137,4 +143,4 @@ roadie/
 - **`FORCE_COLOR=0`** is set for local steps so build tools don't smear ANSI
   codes through the indented output.
 - **No remote artifact verification** beyond what your own `remote` steps
-  check. If you want post-deploy validation, see the [verify recipe](docs/recipes.md#verifying-transfers-sha256-round-trip).
+  check. For post-deploy sha256 validation, see the recipes doc.

@@ -1,0 +1,107 @@
+{
+  "projects": [
+    {
+      "name": "sandbox-roundtrip",
+      "cwd": ".",
+      "ssh": {
+        "host": "localhost",
+        "port": 2222,
+        "user": "deploy",
+        "identityFile": "test/sandbox/keys/id_test"
+      },
+      "steps": [
+        { "name": "Build payload",  "type": "local",    "run": "node -e \"const f=require('fs');f.mkdirSync('.testout',{recursive:true});f.writeFileSync('.testout/payload.txt','merhaba')\"" },
+        { "name": "Upload payload", "type": "transfer", "from": ".testout/payload.txt", "to": "/tmp/payload.txt" },
+        { "name": "Verify upload",  "type": "remote",   "run": "test -f /tmp/payload.txt && grep -q merhaba /tmp/payload.txt" },
+        { "name": "Cleanup remote", "type": "remote",   "run": "rm -f /tmp/payload.txt" },
+        { "name": "Cleanup local",  "type": "local",    "run": "node -e \"require('fs').rmSync('.testout',{recursive:true,force:true})\"" }
+      ]
+    },
+
+    {
+      "name": "sandbox-directory-transfer",
+      "cwd": ".",
+      "ssh": {
+        "host": "localhost",
+        "port": 2222,
+        "user": "deploy",
+        "identityFile": "test/sandbox/keys/id_test"
+      },
+      "steps": [
+        { "name": "Build dir",      "type": "local",    "run": "node -e \"const f=require('fs');f.mkdirSync('.testdir/sub',{recursive:true});f.writeFileSync('.testdir/a.txt','a');f.writeFileSync('.testdir/sub/b.txt','b')\"" },
+        { "name": "Upload dir",     "type": "transfer", "from": ".testdir",        "to": "/tmp/" },
+        { "name": "Verify files",   "type": "remote",   "run": "test -f /tmp/.testdir/a.txt && test -f /tmp/.testdir/sub/b.txt" },
+        { "name": "Cleanup remote", "type": "remote",   "run": "rm -rf /tmp/.testdir" },
+        { "name": "Cleanup local",  "type": "local",    "run": "node -e \"require('fs').rmSync('.testdir',{recursive:true,force:true})\"" }
+      ]
+    },
+
+    {
+      "name": "sandbox-sudo",
+      "cwd": ".",
+      "ssh": {
+        "host": "localhost",
+        "port": 2222,
+        "user": "deploy",
+        "identityFile": "test/sandbox/keys/id_test"
+      },
+      "steps": [
+        { "name": "Sudo write",    "type": "remote", "run": "echo roadie-test | sudo tee /var/lib/probe.txt > /dev/null" },
+        { "name": "Sudo verify",   "type": "remote", "run": "sudo test -f /var/lib/probe.txt" },
+        { "name": "Sudo cleanup",  "type": "remote", "run": "sudo rm -f /var/lib/probe.txt" }
+      ]
+    },
+
+    {
+      "name": "sandbox-demo",
+      "cwd": ".",
+      "ssh": {
+        "host": "localhost",
+        "port": 2222,
+        "user": "deploy",
+        "identityFile": "test/sandbox/keys/id_test"
+      },
+      "notify": "Sandbox demo complete.\nArtifact: /tmp/payload.bin\nChecksum: /tmp/payload.bin.sha256",
+      "steps": [
+        {
+          "name": "Build payload",
+          "type": "local",
+          "run": "node -e \"const f=require('fs');f.mkdirSync('.testout',{recursive:true});f.writeFileSync('.testout/payload.bin','roadie-sandbox-' + Date.now())\""
+        },
+        {
+          "name": "Generate sha256",
+          "type": "local",
+          "run": "node -e \"const c=require('crypto'),f=require('fs');const h=c.createHash('sha256').update(f.readFileSync('.testout/payload.bin')).digest('hex');f.writeFileSync('.testout/payload.bin.sha256',h+'  payload.bin\\n')\""
+        },
+        {
+          "name": "Confirm before upload",
+          "type": "confirm",
+          "prompt": "Payload built. Press Enter to upload to sandbox."
+        },
+        {
+          "name": "Upload payload",
+          "type": "transfer",
+          "from": ".testout/payload.bin",
+          "to": "/tmp/payload.bin"
+        },
+        {
+          "name": "Upload checksum",
+          "type": "transfer",
+          "from": ".testout/payload.bin.sha256",
+          "to": "/tmp/payload.bin.sha256"
+        },
+        {
+          "name": "Verify sha256 on remote",
+          "type": "remote",
+          "cwd": "/tmp",
+          "run": "sha256sum -c payload.bin.sha256"
+        },
+        {
+          "name": "Cleanup local staging",
+          "type": "local",
+          "run": "node -e \"require('fs').rmSync('.testout',{recursive:true,force:true})\""
+        }
+      ]
+    }
+  ]
+}

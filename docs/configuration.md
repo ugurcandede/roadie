@@ -47,11 +47,11 @@ with `"cwd": "."` works the same wherever the file lives.
 you can write `scp preprodapi:...` or `rsync ...` as a `local` step and use
 your own `~/.ssh/config` aliases without the `ssh` block at all.
 
-## Per-OS paths
+## Per-OS values
 
-`project.cwd`, `step.cwd` (for `local`), `step.from` (for `transfer`), and
-`ssh.identityFile` accept either a string (same on every OS) or an object
-keyed by platform:
+`project.cwd`, `step.cwd` (for `local`), `step.from` (for `transfer`),
+`ssh.identityFile`, and `step.run` (for `local`/`remote`) accept either a
+string (same on every OS) or an object keyed by platform:
 
 ```json
 "cwd": {
@@ -82,7 +82,7 @@ Unlike path fields, `run` is **not** `~`-expanded — the shell handles that.
 | Field          | Required | Notes                                                              |
 |----------------|:--------:|--------------------------------------------------------------------|
 | `host`         |   yes    | Hostname or IP. Resolved against your `~/.ssh/config` if applicable. |
-| `user`         |   yes    | Remote username.                                                   |
+| `user`         |    no    | Remote username. Omit to fall back to `~/.ssh/config` User directive. |
 | `port`         |    no    | Defaults to 22.                                                    |
 | `identityFile` |    no    | Path to private key. Accepts per-OS PathLike. ssh-agent works too. |
 

@@ -5,4 +5,4 @@ dist/
 .idea/
 config.json
 config.local.json
-config.test.json
+config.sandbox.json
