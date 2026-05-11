@@ -14,7 +14,7 @@ RUN apk add --no-cache openssh sudo bash coreutils && \
     sed -i 's/#PermitRootLogin .*/PermitRootLogin no/' /etc/ssh/sshd_config && \
     sed -i 's/#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
 
-# authorized_keys is provided at build time (setup.sh writes it next to Dockerfile).
+# authorized_keys is provided at build time (setup.js writes it next to Dockerfile).
 COPY authorized_keys /home/deploy/.ssh/authorized_keys
 RUN chown deploy:deploy /home/deploy/.ssh/authorized_keys && \
     chmod 600 /home/deploy/.ssh/authorized_keys
